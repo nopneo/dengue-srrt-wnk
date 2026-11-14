@@ -1,0 +1,10 @@
+{% if alert_bars and alert_bars.given_up %}
+<div class="alert-bar alert-bar-err no-print" role="alert" data-testid="alert-given-up-banner">
+  หยุดส่งแล้ว {{ alert_bars.given_up }} รายการ — ตรวจกุญแจ MOPH Notify และกลุ่ม LINE แล้วแจ้งผู้ดูแลระบบ
+</div>
+{% endif %}
+{% if alert_bars and alert_bars.retrying %}
+<div class="alert-bar no-print" role="status" data-testid="alert-failing-banner">
+  ส่ง LINE ไม่สำเร็จ {{ alert_bars.retrying }} รายการ — ระบบกำลังลองใหม่อัตโนมัติ
+</div>
+{% endif %}

@@ -1,0 +1,262 @@
+{% extends "base.html" %}
+{% block head %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='leaflet/leaflet.css') }}">
+{% endblock %}
+{% block content %}
+{% set labels = {'ok': ('✔', 'ผ่าน', 'pill-green'), 'warn': ('⚠', 'เตือน', 'pill-orange'), 'fail': ('✘', 'ล้มเหลว', 'pill-red')} %}
+<p class="note-small no-print" style="margin-top:0">หน้านี้เปิดเฉพาะเครือข่ายภายใน รพ. แสดงเฉพาะจำนวนนับและโครงสร้าง ไม่มีข้อมูลรายคน</p>
+
+{% if audit is none %}
+<section class="panel">
+  <div class="panel-head">ผลการตรวจ</div>
+  <div class="panel-body">
+    <p class="map-msg map-msg-error" role="alert" data-testid="no-source">ยังไม่ได้ตั้งค่าการเชื่อมต่อ HOSxP (DB_HOST / DB_USER / DB_PASS) จึงตรวจข้อมูลไม่ได้</p>
+  </div>
+</section>
+{% else %}
+<p class="note-small no-print" data-testid="check-age" style="margin-top:0">ข้อมูลเมื่อ {{ computed_at.strftime('%H:%M') }} น. (ใช้ผลเดิมได้นาน {{ ttl_minutes }} นาที) · <a href="{{ url_for('check_page', refresh=1) }}">ตรวจใหม่</a></p>
+{% if throttled %}<p class="warn-note no-print" role="status" data-testid="check-throttled">ตรวจใหม่ได้ทุก {{ refresh_seconds }} วินาที จึงแสดงข้อมูลเดิม (เมื่อ {{ computed_at.strftime('%H:%M') }} น.)</p>{% endif %}
+<section class="panel">
+  <div class="panel-head">ผลการตรวจ (เหมือน <code>python setup_check.py</code>)</div>
+  <div class="panel-body">
+    <p data-testid="check-summary">ผ่าน {{ summary.ok }} · เตือน {{ summary.warn }} · ล้มเหลว {{ summary.fail }}</p>
+  </div>
+  <div class="table-wrap">
+    <table class="cases" data-testid="check-results">
+      <thead><tr><th>สถานะ</th><th>รายการ</th><th>รายละเอียด</th></tr></thead>
+      <tbody>
+      {% for status, name, detail in results %}
+        {% set l = labels[status] %}
+        <tr><td class="nowrap"><span class="pill {{ l[2] }}">{{ l[0] }} {{ l[1] }}</span></td><td>{{ name }}</td><td class="detail">{{ detail }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="panel-head">รหัสโรค: แอปใช้ เทียบ พบในข้อมูล (12 เดือนล่าสุด)</div>
+  {% if audit.icd.error %}
+  <div class="panel-body"><p class="map-msg map-msg-error">อ่านจำนวนรหัสโรคไม่สำเร็จ ({{ audit.icd.error }})</p></div>
+  {% else %}
+  <div class="table-wrap">
+    <table class="cases" data-testid="icd-table">
+      <thead><tr><th>แอปใช้ (ขึ้นต้นด้วย)</th><th>รหัสที่พบในข้อมูล</th><th>จำนวน visit</th></tr></thead>
+      <tbody>
+      {% for row in audit.icd.rows %}
+        <tr>
+          <td class="nowrap">{{ row.prefix }}</td>
+          <td>{% for code, n in row.codes %}{{ code | icd }} ({{ n }}){{ ', ' if not loop.last }}{% else %}<span class="pill pill-orange">ไม่พบ</span>{% endfor %}</td>
+          <td class="nowrap"><span>{{ row.visits }}</span></td>
+        </tr>
+      {% else %}
+        <tr><td colspan="3" class="empty">ยังไม่ได้ตั้งรหัสโรค (DENGUE_ICDS)</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</section>
+
+{% macro disease_panel(d) %}
+<section class="panel" data-testid="disease-audit-{{ d.key }}">
+  <div class="panel-head">รหัสโรค {{ d.name }}{% if not d.enabled %} <span class="pill pill-gray">ปิดอยู่</span>{% endif %}: แอปใช้ เทียบ พบในข้อมูล (12 เดือนล่าสุด)</div>
+  {% if d.error %}
+  <div class="panel-body"><p class="map-msg map-msg-error">อ่านจำนวนรหัสโรคไม่สำเร็จ ({{ d.error }})</p></div>
+  {% else %}
+  <div class="table-wrap">
+    <table class="cases">
+      <thead><tr><th>แอปใช้ (ขึ้นต้นด้วย)</th><th>รหัสที่พบในข้อมูล</th><th>จำนวน visit</th></tr></thead>
+      <tbody>
+      {% for row in d.rows %}
+        <tr>
+          <td class="nowrap">{{ row.prefix }}</td>
+          <td>{% for code, n in row.codes %}{{ code | icd }} ({{ n }}){{ ', ' if not loop.last }}{% else %}<span class="pill pill-orange">ไม่พบ</span>{% endfor %}</td>
+          <td class="nowrap"><span>{{ row.visits }}</span></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+  <div class="panel-body"><p class="sf-hint">{{ d.mode }} ({{ d.group }}) · ≥ {{ d.min_cases }} ราย ภายใน {{ d.days }} วัน{% if d.radius_m is not none %} · รัศมี {{ d.radius_m }} ม.{% endif %} — ปรับด้วย <code>{{ d.env.icds }}</code> <code>{{ d.env.min_cases }}</code> <code>{{ d.env.days }}</code>{% if d.radius_m is not none %} <code>{{ d.env.radius_m }}</code>{% endif %}</p></div>
+</section>
+{% endmacro %}
+{% for d in audit.diseases if d.enabled %}{{ disease_panel(d) }}{% endfor %}
+{% if audit.diseases | rejectattr('enabled') | list %}
+<details class="closed-diseases" data-testid="closed-diseases">
+  <summary>โรคที่ยังปิดอยู่ — ตรวจรหัสในข้อมูลก่อนเปิดที่หน้า "ตั้งค่า"</summary>
+  {% for d in audit.diseases if not d.enabled %}{{ disease_panel(d) }}{% endfor %}
+</details>
+{% endif %}
+
+<section class="panel">
+  <div class="panel-head">จำนวน visit ตามปี พ.ศ. (ข้อมูลที่หน้า "เปรียบเทียบปี พ.ศ." ใช้เทียบ)</div>
+  {% if audit.years.error %}
+  <div class="panel-body"><p class="map-msg map-msg-error">นับ visit ตามปี พ.ศ.ไม่สำเร็จ ({{ audit.years.error }})</p></div>
+  {% else %}
+  <div class="table-wrap">
+    <table class="cases" data-testid="years-table">
+      <thead><tr><th>ปี พ.ศ. (ม.ค.–ธ.ค.)</th><th>จำนวน visit ตามรหัสโรค</th><th>สถานะ</th></tr></thead>
+      <tbody>
+      {% for r in audit.years.rows %}
+        <tr><td class="nowrap">{{ r.year }}{{ ' (ปัจจุบัน — นับถึงวันนี้)' if r.current }}</td><td class="nowrap"><span>{{ r.visits }}</span></td>
+          <td>{% if r.visits == 0 and not r.current %}<span class="pill pill-orange">ไม่มีข้อมูล — จะถูกตัดออกจากเกณฑ์ระบาด</span>{% elif r.visits == 0 %}<span class="pill pill-gray">ยังไม่มี</span>{% else %}<span class="pill pill-green">มีข้อมูล</span>{% endif %}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <div class="panel-head">ขอบเขตอำเภอบนแผนที่ (ไฟล์ boundaries/&lt;รหัส&gt;.geojson)</div>
+  {% if audit.boundary.error %}
+  <div class="panel-body"><p class="map-msg map-msg-error">ตรวจไฟล์เส้นขอบไม่สำเร็จ ({{ audit.boundary.error }})</p></div>
+  {% elif not audit.boundary.rows %}
+  <div class="panel-body"><p class="map-hint">ยังไม่ทราบอำเภอในเขต — แผนที่ไม่มีเส้นขอบ</p></div>
+  {% else %}
+  <div class="table-wrap">
+    <table class="cases" data-testid="boundary-table">
+      <thead><tr><th>จังหวัด+อำเภอ (รหัส)</th><th>ไฟล์เส้นขอบ</th></tr></thead>
+      <tbody>
+      {% for r in audit.boundary.rows %}
+        <tr><td class="nowrap">{{ r.code }}</td>
+          <td>{% if r.ok %}<span class="pill pill-green">มี</span>{% else %}<span class="pill pill-orange">ไม่มี — สร้างด้วย deploy/fetch_boundary.py</span>{% endif %}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <div class="panel-head">ขอบเขตตำบลบนแผนที่ (ไฟล์ boundaries/&lt;รหัส&gt;.tambon.geojson)</div>
+  {% if audit.tambon.error %}
+  <div class="panel-body"><p class="map-msg map-msg-error">ตรวจไฟล์ขอบเขตตำบลไม่สำเร็จ ({{ audit.tambon.error }})</p></div>
+  {% elif not audit.tambon.rows %}
+  <div class="panel-body"><p class="map-hint">ยังไม่ทราบอำเภอในเขต — แผนที่ไม่มีชั้นตำบล</p></div>
+  {% else %}
+  <div class="table-wrap">
+    <table class="cases" data-testid="tambon-table">
+      <thead><tr><th>จังหวัด+อำเภอ (รหัส)</th><th>ไฟล์ตำบล</th><th>ตำบลในไฟล์</th></tr></thead>
+      <tbody>
+      {% for r in audit.tambon.rows %}
+        <tr><td class="nowrap">{{ r.code }}</td>
+          <td>{% if r.ok %}<span class="pill pill-green">มี</span>{% else %}<span class="pill pill-orange">ไม่มี — สร้างด้วย deploy/make_tambon_boundary.py</span>{% endif %}</td>
+          <td>{{ r.names | join(', ') }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <div class="panel-head">พิกัดสถานพยาบาล (รพ./รพ.สต.) บนแผนที่</div>
+  {% if audit.facilities.error %}
+  <div class="panel-body"><p class="map-msg map-msg-error">ตรวจพิกัดสถานพยาบาลไม่สำเร็จ ({{ audit.facilities.error }})</p></div>
+  {% else %}
+  <div class="panel-body">
+    <p>รายชื่อจาก HOSxP: <span>{{ audit.facilities.catalog }}</span> แห่ง · มีพิกัดแล้ว <span>{{ audit.facilities.placed }}</span> แห่ง · ยังไม่มีพิกัด <span>{{ audit.facilities.unplaced | length }}</span> แห่ง</p>
+  </div>
+  {% if audit.facilities.unplaced %}
+  <div class="table-wrap">
+    <table class="cases" data-testid="facility-table">
+      <thead><tr><th>สถานพยาบาลที่ยังไม่มีพิกัด</th><th>ประเภท</th></tr></thead>
+      <tbody>
+      {% for u in audit.facilities.unplaced %}
+        <tr><td>{{ u.name }}</td><td class="nowrap">{{ 'โรงพยาบาล' if u.kind == 'hospital' else 'รพ.สต.' }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+  {% endif %}
+</section>
+
+<section class="panel">
+  <div class="panel-head">อำเภอที่ถือว่า "ในเขต": แอปใช้ เทียบ พบในผู้ป่วย</div>
+  <div class="panel-body">
+    {% if audit.area.error %}
+    <p class="map-msg map-msg-error">อ่านข้อมูลอำเภอไม่สำเร็จ ({{ audit.area.error }})</p>
+    {% else %}
+    <p>แอปใช้: <strong>{{ audit.area.used | join(', ') or '(ว่าง — ทุกเคสจะนับว่านอกเขต)' }}</strong>
+      {% if audit.area.origin == 'env' %}(ตั้งด้วย DENGUE_AREA_AMPHOE){% elif audit.area.origin == 'village' %}(ค่าเริ่มต้นจากตาราง village){% endif %}</p>
+    <p>ผู้ป่วยที่วินิจฉัยตามรหัสโรค 12 เดือน: <span>{{ audit.area.visits }}</span> visit · จับคู่หมู่บ้านและพิกัดได้ <span>{{ audit.area.mapped }}</span> visit</p>
+    {% endif %}
+  </div>
+  {% if not audit.area.error %}
+  <div class="table-wrap">
+    <table class="cases" data-testid="area-table">
+      <thead><tr><th>จังหวัด+อำเภอ (รหัส)</th><th>จำนวน visit</th><th>จับคู่หมู่บ้าน/พิกัดได้</th><th>เขต</th></tr></thead>
+      <tbody>
+      {% for r in audit.area.rows %}
+        <tr><td class="nowrap">{{ r.code or '(ไม่ทราบ)' }}</td><td><span>{{ r.visits }}</span></td><td><span>{{ r.mapped }}</span></td>
+          <td>{% if r.in_area %}<span class="pill pill-green">ในเขต</span>{% else %}<span class="pill pill-gray">นอกเขต</span>{% endif %}</td></tr>
+      {% else %}
+        <tr><td colspan="4" class="empty">ไม่พบผู้ป่วยตามรหัสโรคใน 12 เดือนล่าสุด</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <div class="panel-head">จุดกลางหมู่บ้านของ รพ. (ตรวจตำแหน่งด้วยตา)</div>
+  <div class="panel-body map-body">
+    {% if audit.villages.error %}
+    <p class="map-msg map-msg-error">อ่านข้อมูลหมู่บ้านไม่สำเร็จ ({{ audit.villages.error }})</p>
+    {% else %}
+    <p>หมู่บ้านในตาราง village: <span>{{ audit.villages.counts.total }}</span> · มีจุดกลาง: <span>{{ audit.villages.counts.with_centroid }}</span></p>
+    {% endif %}
+    <div id="map" class="map-box map-box-wide" role="application" aria-label="แผนที่จุดกลางหมู่บ้านของโรงพยาบาล"></div>
+    {% if show_osm_attribution %}<p class="map-credit">แผนที่: © OpenStreetMap contributors</p>{% endif %}
+    <p class="map-hint">แต่ละจุดคือจุดกลางหมู่บ้านที่แอปใช้เดาตำแหน่งบ้านผู้ป่วย — ตรวจว่าตกอยู่ในหมู่บ้านนั้นจริง</p>
+    <p class="map-msg map-msg-error" id="check-map-msg" role="alert" hidden></p>
+    <noscript><p class="map-msg">ต้องเปิด JavaScript เพื่อใช้แผนที่</p></noscript>
+  </div>
+</section>
+{% endif %}
+
+<section class="panel">
+  <div class="panel-head">ค่า env ที่ควรตั้ง</div>
+  <div class="table-wrap">
+    <table class="cases" id="env-table">
+      <thead><tr><th>ตัวแปร</th><th>ค่าปัจจุบัน</th><th>แหล่งที่มา</th><th>หมายเหตุ</th></tr></thead>
+      <tbody>
+      {% for e in env_shown %}
+        <tr><td class="nowrap">{{ e.name }}</td><td>{{ e.value }}</td><td class="nowrap">{{ e.source }}</td><td class="detail">{{ e.note }}</td></tr>
+      {% endfor %}
+      {% for s in env_secrets %}
+        <tr><td class="nowrap">{{ s.name }}</td>
+          <td>{% if s.state == 'set' %}<span class="pill pill-green">ตั้งแล้ว</span>{% elif s.state == 'invalid' %}<span class="pill pill-red">ยังเป็นค่าตัวอย่าง/ไม่ถูกต้อง</span>{% else %}<span class="pill pill-orange">ยังไม่ได้ตั้ง</span>{% endif %}</td>
+          <td class="nowrap">{{ s.source }}</td>
+          <td class="detail">ไม่แสดงค่า (แสดงเฉพาะสถานะ)</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="panel no-print">
+  <div class="panel-head">ยืนยันว่าตรวจแล้ว</div>
+  <div class="panel-body">
+    <p>เมื่อตรวจตารางด้านบนและตำแหน่งจุดกลางหมู่บ้านแล้ว และทดลองคู่กับรายงานเดิม 1–2 สัปดาห์ กดยืนยันเพื่อซ่อนแถบเตือนในเบราว์เซอร์เครื่องนี้
+      (ถาวรทั้งเซิร์ฟเวอร์ให้ตั้ง <code>DENGUE_DATA_AUDITED=1</code> ใน .env)</p>
+    <div class="map-tools">
+      <button type="button" class="btn btn-solid" id="btn-audit">ยืนยันว่าตรวจกับข้อมูล รพ. นี้แล้ว</button>
+      <button type="button" class="btn" id="btn-unaudit">ล้างการยืนยัน</button>
+    </div>
+    <p class="map-msg" id="audit-state" role="status" aria-live="polite" hidden></p>
+  </div>
+</section>
+{% if check_data %}
+<script type="application/json" id="check-data">{{ check_data | tojson }}</script>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+{% if check_data %}<script src="{{ url_for('static', filename='leaflet/leaflet.js') }}"></script>{% endif %}
+<script src="{{ url_for('static', filename='check.js') }}"></script>
+{% endblock %}

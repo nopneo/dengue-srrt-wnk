@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% macro area_row(r, level, parent_key) %}
+<tr class="{{ 'area-top' if level == 0 else 'area-child' }}" {% if level == 0 %}data-total="{{ r.selected }}"{% else %}data-parent="{{ parent_key }}" hidden{% endif %}
+    data-testid="area-{{ 'outside' if r.kind == 'outside' else (r.key or 'unknown') }}">
+  <th scope="row" class="{{ 'area-hot' if r.hot }}">
+    {% if level == 0 and r.children %}<button type="button" class="area-toggle" data-key="{{ r.key }}" aria-expanded="false" aria-label="แสดงหมู่บ้านของ {{ r.label }}">▸</button>{% endif %}
+    {{ r.label }}{% if r.hot %} <span class="pill pill-orange">สูงกว่าค่าเฉลี่ยปีก่อน</span>{% endif %}
+  </th>
+  {% for t in r.totals %}<td class="num">{{ t }}</td>{% endfor %}
+</tr>
+{% endmacro %}
+{% block content %}
+{% include "_alert_bars.html" %}
+{% if no_source %}
+<section class="panel"><div class="panel-body">
+  <p class="alert-bar" role="alert">ยังไม่ได้เชื่อมต่อฐานข้อมูล HOSxP — ตั้งค่าที่หน้า "ตั้งค่า" ก่อนใช้หน้านี้</p>
+</div></section>
+{% else %}
+<section class="panel">
+  <div class="panel-head">เปรียบเทียบจำนวนผู้ป่วย{{ current_disease.name_th }}ตามปี พ.ศ.</div>
+  <form method="get" action="{{ url_for('trend_page') }}" class="filters no-print" aria-label="ตัวเลือก">
+    {% if disease_param %}<input type="hidden" name="d" value="{{ disease_param }}">{% endif %}
+    <div class="fgroup"><label class="flabel" for="year">ปี พ.ศ.</label>
+      <select id="year" name="year">
+        {% for y in year_options %}<option value="{{ y }}" {{ 'selected' if y == params.year }}>{{ y }}{{ ' (ปัจจุบัน)' if y == current_yr }}</option>{% endfor %}
+      </select></div>
+    <div class="fgroup"><label class="flabel" for="years">เทียบย้อนหลัง</label>
+      <select id="years" name="years">
+        {% for n in (2, 3) %}<option value="{{ n }}" {{ 'selected' if n == params.years }}>{{ n }} ปี</option>{% endfor %}
+      </select></div>
+    <div class="fgroup"><label class="flabel"><input type="checkbox" name="all" value="1" {{ 'checked' if params.include_outside }}> รวมผู้ป่วยนอกอำเภอ</label></div>
+    <div class="fgroup"><button type="submit" class="btn btn-solid">แสดง</button>
+      <a class="btn" href="{{ url_for('trend_page', year=params.year, years=params.years, all=1 if params.include_outside else None, refresh=1, d=disease_param) }}">คำนวณใหม่</a></div>
+    {% if computed_at %}<div class="fgroup"><span class="flabel">คำนวณล่าสุด {{ computed_at.strftime('%d/%m/%Y %H:%M') }}</span></div>{% endif %}
+  </form>
+  <div class="panel-body">
+    {% for w in warnings %}<p class="alert-bar" role="alert">{{ w }}</p>{% endfor %}
+    {% for n in notes %}<p class="cancel-banner" data-testid="trend-note">{{ n }}</p>{% endfor %}
+
+    {% if selected_failed %}
+    <p class="alert-bar alert-bar-err" role="alert">ไม่สามารถแสดงข้อมูลปี พ.ศ. {{ params.year }} ได้ในขณะนี้ — ลองใหม่ภายหลัง</p>
+    {% else %}
+    <div class="kpis trend-kpis">
+      {% set klass = ['g-blue', 'g-orange', 'g-green', 'g-red'] %}
+      {% for c in cards %}
+      <div class="kpi {{ klass[loop.index0 % 4] }}">
+        <div class="kpi-label">ปี พ.ศ. {{ c.year }} ({{ months_label }})</div>
+        <div class="kpi-num" data-testid="total-{{ c.year }}">{{ c.total }}</div>
+        {% if not c.selected %}
+        <div class="kpi-sub">ปี {{ params.year }} เทียบปีนี้:
+          {% if c.pct is none %}—{% else %}{{ '%+.1f' | format(c.pct) }}%{% endif %}</div>
+        {% else %}<div class="kpi-sub">ปีที่เลือก · {{ 'รวมผู้ป่วยนอกอำเภอ' if params.include_outside else 'เฉพาะในอำเภอ' }}</div>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+
+    {% if current_row and current_row.status %}
+    <p class="trend-status">เดือน{{ current_row.label }} ปี พ.ศ. {{ params.year }}: {{ current_row.selected }} ราย
+      <span class="pill {{ current_row.status.css }}" data-testid="month-status">{{ current_row.status.label }}</span>
+      <span class="muted">(มัธยฐาน {{ '%.1f' | format(current_row.median) }} · เกณฑ์ {{ '%.1f' | format(current_row.threshold) }})</span></p>
+    {% endif %}
+
+    {% if partial_note %}<p class="muted" data-testid="partial-note">{{ partial_note }}</p>{% endif %}
+
+    {% set g = chart %}
+    <figure class="trend-chart">
+      <svg viewBox="0 0 {{ g.width }} {{ g.height }}" role="img" aria-label="กราฟจำนวนรายรายเดือนเทียบปี พ.ศ. {{ chart_yrs | join(', ') }}">
+        {% for y, v in g.y_ticks %}
+        <line x1="{{ g.plot[0] }}" x2="{{ g.plot[2] }}" y1="{{ y }}" y2="{{ y }}" class="grid"/>
+        <text x="{{ g.plot[0] - 6 }}" y="{{ y + 4 }}" text-anchor="end" class="axis">{{ v }}</text>
+        {% endfor %}
+        {% for x, label in g.x_labels %}<text x="{{ x }}" y="{{ g.plot[3] + 18 }}" text-anchor="middle" class="axis">{{ label }}</text>{% endfor %}
+        {% if g.threshold %}<polyline points="{{ g.threshold }}" class="ref-threshold" fill="none"/>{% endif %}
+        {% if g.median %}<polyline points="{{ g.median }}" class="ref-median" fill="none"/>{% endif %}
+        {% for line in g.lines | reverse %}
+          {% for seg in line.segments %}<polyline points="{{ seg }}" fill="none" stroke="{{ line.color }}" stroke-width="{{ line.width }}" stroke-linejoin="round" stroke-linecap="round"/>{% endfor %}
+          {% for x, y, v in line.dots %}<circle cx="{{ x }}" cy="{{ y }}" r="{{ 4 if line.year == params.year else 2.8 }}" fill="{{ line.color }}"><title>ปี พ.ศ. {{ line.year }}: {{ v }} ราย</title></circle>{% endfor %}
+        {% endfor %}
+      </svg>
+      <figcaption class="trend-legend">
+        {% for line in g.lines %}<span><i style="background:{{ line.color }}"></i>ปี พ.ศ. {{ line.year }}</span>{% endfor %}
+        {% if g.median %}<span><i class="lg-median"></i>มัธยฐานปีย้อนหลัง</span><span><i class="lg-threshold"></i>เกณฑ์ระบาด (ค่าเฉลี่ย+2SD)</span>{% endif %}
+      </figcaption>
+    </figure>
+
+    <div class="table-wrap">
+      <table class="cases trend-table" aria-label="จำนวนรายรายเดือน">
+        <thead><tr><th scope="col">เดือน</th><th scope="col" class="num">ปี {{ params.year }}</th>
+          {% for year in prior_yrs %}<th scope="col" class="num">ปี {{ year }}</th>{% endfor %}
+          {% if ref %}<th scope="col" class="num">มัธยฐาน</th><th scope="col" class="num">เกณฑ์ระบาด</th><th scope="col">สถานะ</th>{% endif %}</tr></thead>
+        <tbody>
+        {% for r in rows %}
+        <tr class="{{ 'row-current' if r.current }}"><th scope="row">{{ r.label }}</th>
+          <td class="num" data-testid="sel-{{ loop.index0 }}">{{ '—' if r.selected is none else r.selected }}</td>
+          {% for v in r.prior %}<td class="num">{{ '—' if v is none else v }}</td>{% endfor %}
+          {% if ref %}<td class="num">{{ '%.1f' | format(r.median) }}</td><td class="num">{{ '%.1f' | format(r.threshold) }}</td>
+          <td>{% if r.status %}<span class="pill {{ r.status.css }}">{{ r.status.label }}</span>{% endif %}</td>{% endif %}
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+  </div>
+</section>
+
+{% if not selected_failed %}
+<section class="panel">
+  <div class="panel-head">แยกตามพื้นที่ (ตำบล → หมู่บ้าน) · {{ months_label }}</div>
+  <div class="panel-body">
+    {% if area %}
+    <div class="table-wrap">
+      <table class="cases trend-area" aria-label="จำนวนรายแยกพื้นที่">
+        <thead><tr><th scope="col">พื้นที่ (ตามที่อยู่ในทะเบียนผู้ป่วย)</th>
+          {% for year in area_yrs %}<th scope="col" class="num">ปี {{ year }}</th>{% endfor %}</tr></thead>
+        <tbody>
+        {% for r in area %}
+          {{ area_row(r, 0, '') }}
+          {% for c in r.children %}{{ area_row(c, 1, r.key) }}{% endfor %}
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}<p class="muted">ไม่มีผู้ป่วยในช่วงที่เลือก</p>{% endif %}
+    <p class="muted">แถวที่ไฮไลต์ = ยอดปีที่เลือกสูงกว่าค่าเฉลี่ยของปีย้อนหลัง · "ไม่ทราบพื้นที่" = ที่อยู่ในทะเบียนไม่ครบ</p>
+  </div>
+</section>
+{% endif %}
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='trend.js') }}" defer></script>
+{% endblock %}

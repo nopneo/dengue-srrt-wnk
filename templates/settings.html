@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+{% set by_key = {} %}
+{% for i in settings_data["items"] %}{% set _ = by_key.update({i.key: i}) %}{% endfor %}
+{% set src_text = {"overlay": "จากหน้าตั้งค่า", "env": "จาก .env", "default": "ค่าเริ่มต้น"} %}
+{% set hints = {
+  "DB_HOST": "ชื่อโฮสต์หรือ IP ของฐาน HOSxP (ใช้อ่านอย่างเดียว)",
+  "DB_PORT": "ปกติ 3306",
+  "DB_NAME": "ปกติ hos",
+  "DB_USER": "ผู้ใช้ที่มีสิทธิ์อ่านอย่างเดียว",
+  "DB_PASS": "เปลี่ยนโฮสต์/พอร์ต/ผู้ใช้ ต้องกรอกรหัสผ่านใหม่ในคราวเดียวกัน",
+  "MOPH_CLIENT_KEY": "ได้จากผู้ดูแลกลุ่ม MOPH Notify (ไม่แสดงค่าที่ตั้งไว้)",
+  "MOPH_SECRET_KEY": "ได้จากผู้ดูแลกลุ่ม MOPH Notify (ไม่แสดงค่าที่ตั้งไว้)",
+  "DENGUE_START_FROM": "รูปแบบ ปปปป-ดด-วว เป็นปี ค.ศ. เช่น 2026-11-09 (นับเคสตั้งแต่วันนี้เป็นต้นไป)",
+  "DENGUE_BASE_URL": "ที่อยู่เว็บแอปนี้ ใช้สร้างลิงก์ในข้อความแจ้งเตือน",
+  "DENGUE_DISEASES": "ชื่อโรคคั่นด้วยจุลภาค เช่น dengue,hfmd (dengue ไข้เลือดออก · lepto เล็ปโตสไปโรสิส · malaria มาลาเรีย · chik ชิคุนกุนยา · hfmd มือเท้าปาก · varicella สุกใส · diarrhea อุจจาระร่วง/อาหารเป็นพิษ) — เปิดโรคใหม่ให้ตรวจหน้า \"ตรวจก่อนใช้\" ก่อน"} %}
+
+{% macro badge(i) -%}
+  {%- if i.state == "set" -%}
+    <span class="pill pill-green">ตั้งแล้ว ({{ src_text.get(i.source, "") }})</span>
+  {%- else -%}
+    <span class="pill pill-orange">ยังไม่ได้ตั้ง</span>
+  {%- endif -%}
+{%- endmacro %}
+
+{% macro field(key) %}
+{% set i = by_key[key] %}
+<div class="sfield" data-field="{{ key }}">
+  <label class="sf-label" for="f-{{ key }}">{{ i.label }} <code>{{ key }}</code></label>
+  {% if i.secret %}
+  <div class="sf-row">
+    <input type="password" id="f-{{ key }}" data-key="{{ key }}" autocomplete="new-password" autocapitalize="off" spellcheck="false" placeholder="เว้นว่าง = ใช้ค่าเดิม" aria-describedby="b-{{ key }} h-{{ key }}">
+    <span class="sf-badge" id="b-{{ key }}" data-badge="{{ key }}">{{ badge(i) }}</span>
+  </div>
+  <label class="sf-clear"><input type="checkbox" data-clear="{{ key }}"> ล้างค่า</label>
+  {% elif key == "DENGUE_DATA_AUDITED" %}
+  <select id="f-{{ key }}" data-key="{{ key }}" aria-describedby="h-{{ key }}">
+    <option value="0" {{ "selected" if i.value != "1" }}>0 — ยังไม่ได้ยืนยัน (แสดงแถบเตือนบนทุกหน้า)</option>
+    <option value="1" {{ "selected" if i.value == "1" }}>1 — ยืนยันแล้ว (ซ่อนแถบเตือน)</option>
+  </select>
+  <div class="sf-src">{{ src_text.get(i.source, "") }}</div>
+  {% else %}
+  <input type="text" id="f-{{ key }}" data-key="{{ key }}" value="{{ i.value or '' }}" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="h-{{ key }}"
+    {%- if key == "DB_PORT" %} inputmode="numeric"{% endif %}
+    {%- if key == "DENGUE_START_FROM" %} inputmode="numeric" placeholder="ปปปป-ดด-วว (ค.ศ.)"{% endif %}>
+  <div class="sf-src">{% if i.value %}{{ src_text.get(i.source, "") }}{% elif key == "DENGUE_START_FROM" and i.fallback %}ยังไม่ได้ตั้ง — ใช้วันที่เริ่มระบบ ({{ i.fallback }}){% else %}ยังไม่ได้ตั้ง{% endif %}</div>
+  {% endif %}
+  <div class="sf-hint" id="h-{{ key }}">{{ hints.get(key, "") }}{% if key == "DENGUE_START_FROM" %} <span id="hint-start-from" class="sf-be" aria-live="polite"></span>{% endif %}</div>
+</div>
+{% endmacro %}
+
+{% block content %}
+{% if settings_data.insecure_transport %}
+<div class="alert-bar no-print" id="insecure-transport" role="alert">
+  <strong>ไม่ปลอดภัย:</strong> {{ settings_data.insecure_transport_warning }}
+</div>
+{% endif %}
+{% if settings_data.overlay_error %}
+<div class="alert-bar alert-bar-err no-print" id="settings-overlay-error" role="alert">
+  <strong>ไฟล์ค่าตั้งมีปัญหา:</strong> {{ settings_data.overlay_error }}
+</div>
+{% endif %}
+<p class="note-small note-flush no-print">หน้านี้เปิดเฉพาะผู้ดูแลในเครือข่ายภายใน รพ. ค่าที่แก้จะซ้อนทับ .env และต้องเริ่มระบบใหม่ (อัตโนมัติ ใช้เวลาไม่กี่วินาที) · ไม่แสดงรหัสผ่านหรือกุญแจที่ตั้งไว้ เว้นว่างช่องลับ = ใช้ค่าเดิม</p>
+<p class="note-small note-tight" id="settings-saved-by">
+  {% if settings_data.updated_by or settings_data.updated_at_text -%}
+  บันทึกล่าสุดโดย <strong>{{ settings_data.updated_by or "-" }}</strong>{% if settings_data.updated_at_text %} เมื่อ {{ settings_data.updated_at_text }} น.{% endif %}
+  {%- else -%}
+  ยังไม่เคยบันทึกจากหน้านี้ (ใช้ค่าจาก .env และค่าเริ่มต้น)
+  {%- endif %}
+</p>
+<script type="application/json" id="settings-data">{{ settings_data | tojson }}</script>
+
+<form id="settings-form" class="settings-form" autocomplete="off" novalidate>
+  <div class="status-stack no-print">
+    <div class="map-msg" id="settings-status" role="status" aria-live="polite"></div>
+    <div class="map-msg map-msg-error" id="settings-error" role="alert"></div>
+  </div>
+  <section class="panel" data-group="db">
+    <div class="panel-head">ฐานข้อมูล HOSxP</div>
+    <div class="panel-body">
+      <div class="sgrid">
+        {{ field("DB_HOST") }}
+        {{ field("DB_PORT") }}
+        {{ field("DB_NAME") }}
+        {{ field("DB_USER") }}
+        {{ field("DB_PASS") }}
+      </div>
+      <div class="map-tools">
+        <button type="button" class="btn" id="btn-test-db" data-action>ทดสอบ HOSxP</button>
+      </div>
+      <ul class="steps" data-steps="db" aria-live="polite" hidden></ul>
+    </div>
+  </section>
+
+  <section class="panel" data-group="moph">
+    <div class="panel-head">MOPH Notify (LINE)</div>
+    <div class="panel-body">
+      <div class="sgrid">
+        {{ field("MOPH_CLIENT_KEY") }}
+        {{ field("MOPH_SECRET_KEY") }}
+      </div>
+      <div class="map-tools">
+        <button type="button" class="btn" id="btn-test-moph" data-action>ทดสอบ MOPH</button>
+        <button type="button" class="btn" id="btn-send-test" data-action>ส่งข้อความทดสอบเข้ากลุ่ม</button>
+      </div>
+      <p class="sf-hint">"ทดสอบ MOPH" ตรวจกุญแจและเครือข่ายเท่านั้น (ไม่ส่งข้อความ) · "ส่งข้อความทดสอบ" ส่งข้อความสั้น ๆ ไม่มีข้อมูลผู้ป่วยเข้ากลุ่ม LINE จริง 1 ข้อความ</p>
+      <ul class="steps" data-steps="moph" aria-live="polite" hidden></ul>
+    </div>
+  </section>
+
+  <section class="panel" data-group="golive">
+    <div class="panel-head">วัน go-live และลิงก์</div>
+    <div class="panel-body">
+      <div class="sgrid">
+        {{ field("DENGUE_START_FROM") }}
+        {{ field("DENGUE_BASE_URL") }}
+      </div>
+      <p class="warn-note" id="start-from-warning" role="status" aria-live="polite">{% if settings_data.start_from_default %}{{ settings_data.start_from_unset_warning }}{% endif %}</p>
+    </div>
+  </section>
+
+  <section class="panel" data-group="diseases">
+    <div class="panel-head">โรคที่ติดตาม</div>
+    <div class="panel-body">
+      <div class="sgrid">
+        {{ field("DENGUE_DISEASES") }}
+      </div>
+      <p class="sf-hint">เกณฑ์ที่ใช้จริงของทุกโรค (อ่านอย่างเดียว; โรคที่ปิดอยู่ติดป้าย) — ปรับเกณฑ์/รหัส ICD ได้ที่ไฟล์ .env ตามชื่อตัวแปรด้านขวา แล้วรีสตาร์ต · เกณฑ์ตั้งต้นของโรคใหม่ให้ทีม SRRT ทวนก่อนเปิดใช้</p>
+      <div class="table-wrap">
+        <table class="cases" data-testid="disease-rules">
+          <thead><tr><th>โรค</th><th>รหัส ICD</th><th>การแจ้งเตือน</th><th>ขั้นต่ำ (ราย)</th><th>ภายใน (วัน)</th><th>รัศมี (ม.)</th><th>ตัวแปร .env</th></tr></thead>
+          <tbody>
+          {% for r in disease_rules %}
+            <tr{% if not r.enabled %} class="row-off"{% endif %}><td>{{ r.name }}{% if not r.enabled %} <span class="pill pill-gray">ปิดอยู่</span>{% endif %}</td><td>{{ r.icds }}</td><td>{{ r.mode }} ({{ r.group }})</td>
+              <td>{{ r.min_cases }}</td><td>{{ r.days }}</td><td>{{ r.radius_m if r.radius_m is not none else "-" }}</td>
+              <td><code>{{ r.env.icds }}</code> <code>{{ r.env.min_cases }}</code> <code>{{ r.env.days }}</code>{% if r.radius_m is not none %} <code>{{ r.env.radius_m }}</code>{% endif %}</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" data-group="audited">
+    <div class="panel-head">การยืนยันตัวเลข</div>
+    <div class="panel-body">
+      <div class="sgrid">
+        {{ field("DENGUE_DATA_AUDITED") }}
+      </div>
+      <p class="sf-hint">ตั้งเป็น 1 หลังตรวจหน้า "ตรวจก่อนใช้" และทดลองคู่กับรายงานเดิมแล้ว (แถบเตือนบนทุกหน้าจะหายไปทั้งเซิร์ฟเวอร์)</p>
+    </div>
+  </section>
+
+  <section class="panel" data-group="save">
+    <div class="panel-head">บันทึกการเปลี่ยนแปลง</div>
+    <div class="panel-body">
+      <div class="sgrid">
+        <div class="sfield">
+          <label class="sf-label" for="f-confirm-password">รหัสผ่านของคุณ (ยืนยันการแก้ไข)</label>
+          <input type="password" id="f-confirm-password" data-confirm autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="h-confirm-password">
+          <div class="sf-hint" id="h-confirm-password">รหัสผ่านที่ใช้เข้าสู่ระบบนี้ (ไม่ใช่รหัสฐานข้อมูล) · ผิดหลายครั้งจะถูกล็อกชั่วคราว</div>
+        </div>
+      </div>
+      <label class="sf-clear" id="force-wrap" hidden><input type="checkbox" id="force"> บันทึกแม้ทดสอบไม่ผ่าน</label>
+      <div class="map-tools">
+        <button type="submit" class="btn btn-solid" id="btn-save" data-action>บันทึก</button>
+        <button type="button" class="btn" id="btn-revert" data-action {% if not settings_data.has_prev %}hidden{% endif %}>ย้อนกลับค่าก่อนหน้า</button>
+      </div>
+      <ul class="steps" data-steps="save" aria-live="polite" hidden></ul>
+    </div>
+  </section>
+
+</form>
+<noscript><p class="map-msg map-msg-error">ต้องเปิด JavaScript เพื่อใช้หน้านี้</p></noscript>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='settings_logic.js') }}"></script>
+<script src="{{ url_for('static', filename='settings.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block head %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='leaflet/leaflet.css') }}">
+{% endblock %}
+{% block content %}
+{% set p = case.pin_state | pin_pill %}
+{% set a = case.in_area | area_pill %}
+<div class="case-head">
+  <a class="back-link" href="{{ url_for('index', d=back_d) }}">&larr; กลับรายการเคส</a>
+  <div class="case-pills">
+    <span class="pill {{ a.css }}">{{ a.label }}</span>
+    <span class="pill pill-blue" data-testid="case-disease">{{ disease_name }}</span>
+    {% if cancelled %}<span class="pill pill-gray">ยกเลิก</span>
+    {% else %}<span class="pill {{ p.css }}" id="pin-pill" data-testid="pin-pill">{{ p.label }}</span>{% endif %}
+    <span class="case-meta">วินิจฉัย {{ case.dx_at | thai_datetime }}</span>
+  </div>
+</div>
+
+{% if cancelled %}
+<div class="cancel-banner" role="status" data-testid="cancel-banner">เคสนี้ถูกยกเลิก (แพทย์แก้รหัสวินิจฉัย)</div>
+{% endif %}
+
+<div class="case-grid">
+  <section class="panel">
+    <div class="panel-head">แผนที่และหมุดบ้านผู้ป่วย</div>
+    <div class="panel-body map-body">
+      <div id="map" class="map-box" role="application" aria-label="แผนที่ตำแหน่งบ้านผู้ป่วย"></div>
+      {% if show_osm_attribution %}<p class="map-credit">แผนที่: © OpenStreetMap contributors</p>{% endif %}
+      {% if can_edit %}
+      <div class="map-tools no-print">
+        <button type="button" class="btn" id="btn-locate">ใช้ตำแหน่งปัจจุบัน</button>
+        <button type="button" class="btn btn-solid" id="btn-confirm">ยืนยันหมุด</button>
+      </div>
+      <p class="map-hint" id="map-hint">
+        {% if case.pin_state == 'none' %}คลิกบนแผนที่เพื่อวางหมุด หรือใช้ตำแหน่งปัจจุบัน แล้วกด "ยืนยันหมุด"
+        {% else %}ลากหมุดไปที่บ้านผู้ป่วย แล้วกด "ยืนยันหมุด" {% if radius_m %}(วงกลมคือรัศมี {{ radius_m }} ม.){% endif %}{% endif %}
+      </p>
+      {% endif %}
+      <p class="map-msg" id="pin-msg" role="status" aria-live="polite" hidden></p>
+      <noscript><p class="map-msg">ต้องเปิด JavaScript เพื่อใช้แผนที่</p></noscript>
+    </div>
+  </section>
+
+  <div class="case-side">
+    <section class="panel">
+      <div class="panel-head">ข้อมูลผู้ป่วย</div>
+      <div class="panel-body">
+        <dl class="kv">
+          <dt>HN</dt><dd>{{ case.hn }}</dd>
+          <dt>อายุ / เพศ</dt><dd>{{ (case.age_years ~ ' ปี') if case.age_years is not none else '-' }} / {{ case.sex | sex }}</dd>
+          <dt>พื้นที่</dt><dd>{{ case.village_code | area }}</dd>
+          {% if contact %}
+          <dt>ชื่อ</dt><dd>{{ contact.name or '-' }}</dd>
+          <dt>เบอร์โทร</dt><dd>{{ contact.phone or '-' }}</dd>
+          <dt>ที่อยู่</dt><dd>{{ contact.address or '-' }}</dd>
+          {% endif %}
+        </dl>
+        {% if not contact %}<p class="warn-note" data-testid="contact-error">{{ contact_error }}</p>{% endif %}
+        <p class="note-small">ชื่อ เบอร์ และที่อยู่ดึงสดจาก HOSxP ทุกครั้งที่เปิดหน้า ไม่ถูกเก็บในแอปนี้</p>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">{% if radius_m %}ผู้ป่วยรายอื่นในรัศมี {{ radius_m }} ม.{% else %}ผู้ป่วยรายอื่นรอบหมุด{% endif %}</div>
+      <div class="panel-body">
+        {% if neighbors %}
+        <ul class="nb-list">
+          {% for n in neighbors %}
+          {% set np = n.case.pin_state | pin_pill %}
+          <li>
+            <div><strong>{{ n.case.hn }}</strong> <span class="nb-dist">{{ n.distance_m }} ม.</span></div>
+            <div class="nb-sub">{{ n.case.dx_at | thai_date }} <span class="pill {{ np.css }}">{{ np.label }}</span>
+              <a class="view" href="{{ url_for('case_detail', case_id=n.case.id) }}">ดู</a></div>
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <p class="empty-note">{% if radius_m %}ยังไม่มีผู้ป่วยรายอื่นในรัศมีนี้{% else %}โรคนี้ดูเป็นกลุ่มก้อนในหมู่บ้านเดียวกัน (ไม่ใช้รัศมีรอบหมุด){% endif %}</p>
+        {% endif %}
+      </div>
+    </section>
+  </div>
+</div>
+
+<script type="application/json" id="case-data">{{ case_data | tojson }}</script>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='leaflet/leaflet.js') }}"></script>
+<script src="{{ url_for('static', filename='case.js') }}"></script>
+{% endblock %}

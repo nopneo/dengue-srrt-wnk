@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block head %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='leaflet/leaflet.css') }}">
+{% endblock %}
+{% block content %}
+{% include "_alert_bars.html" %}
+<section class="panel">
+  <div class="panel-head">แผนที่เคส{{ current_disease.name_th }}ที่ปักหมุดแล้ว</div>
+  <div class="filters" aria-label="ตัวกรอง">
+    <div class="fgroup"><span class="flabel">ช่วงวัน</span>
+      {% for n in presets %}
+      <a class="fpill {{ 'on' if n == days }}" href="{{ url_for('map_view', days=n, cluster=selected, past=past, d=disease_param) }}">{{ n }} วัน</a>
+      {% endfor %}
+      {% if custom_days %}<a class="fpill on" href="{{ url_for('map_view', days=custom_days, cluster=selected, past=past, d=disease_param) }}">{{ custom_days }} วัน</a>{% endif %}
+    </div>
+    <div class="fgroup past-opts"><span class="flabel">การระบาดปี พ.ศ.ก่อนหน้า</span>
+      <a class="fpill {{ 'on' if past is none }}" href="{{ url_for('map_view', days=days, cluster=selected, d=disease_param) }}">ไม่แสดง</a>
+      {% for y in past_years %}
+      <a class="fpill {{ 'on' if y == past }}" href="{{ url_for('map_view', days=days, cluster=selected, past=y, d=disease_param) }}">{{ y }}</a>
+      {% endfor %}
+    </div>
+    <div class="fgroup layer-opts"><span class="flabel">เลเยอร์</span>
+      <label class="fcheck"><input type="checkbox" id="toggle-tambon" checked> ตำบล</label>
+      <label class="fcheck"><input type="checkbox" id="toggle-facility" checked> สถานพยาบาล</label>
+    </div>
+    {% if selected %}
+    <div class="fgroup"><span class="flabel">กลุ่ม</span>
+      <span class="pill pill-red" data-testid="cluster-chip">กลุ่ม #{{ selected }}</span>
+      <a class="fpill" href="{{ url_for('map_view', days=days, past=past, d=disease_param) }}">ดูทั้งหมด</a>
+    </div>
+    {% endif %}
+  </div>
+  <div class="panel-body map-body">
+    <div id="map" class="map-box map-box-wide" role="application" aria-label="แผนที่รวมเคส{{ current_disease.name_th }}"></div>
+    {% if show_osm_attribution %}<p class="map-credit">แผนที่: © OpenStreetMap contributors</p>{% endif %}
+    {% if outside_notice %}<p class="warn-note" role="status" data-testid="cluster-outside-notice">รวมสมาชิกกลุ่มที่อยู่นอกช่วง {{ days }} วัน</p>{% endif %}
+    <ul class="map-legend" aria-label="คำอธิบายสี">
+      <li><span class="dot dot-green"></span>ยืนยันแล้ว</li>
+      <li><span class="dot dot-blue"></span>ประมาณ</li>
+      <li><span class="dot dot-red"></span>กลุ่ม (cluster) {% if radius_m %}รัศมี {{ radius_m }} ม.{% else %}หมู่บ้านเดียวกัน{% endif %}</li>
+      <li id="legend-boundary" hidden><span class="dot dot-line"></span>เส้นประ = ขอบเขตอำเภอ</li>
+      <li id="legend-facility" hidden><span class="fac fac-hospital fac-legend">รพ.</span> โรงพยาบาล · <span class="fac fac-rpst fac-legend">+</span> รพ.สต.</li>
+      {% if past is not none %}<li data-testid="legend-past"><span class="dot dot-orange"></span>วงส้ม = ผู้ป่วยปี พ.ศ. {{ past }} ต่อหมู่บ้าน (ขนาดตามจำนวนราย)</li>{% endif %}
+    </ul>
+    <ul id="legend-tambon" class="tambon-legend" aria-label="สีของตำบล" hidden></ul>
+    <div id="facility-admin" class="facility-admin no-print" hidden>
+      <button type="button" id="facility-edit" class="btn" aria-pressed="false">จัดตำแหน่งสถานพยาบาล</button>
+      <ul id="facility-unplaced" class="facility-unplaced"></ul>
+    </div>
+    <p class="map-hint" id="facility-note" hidden></p>
+    <p class="map-hint" id="facility-status" role="status" aria-live="polite" hidden></p>
+    <p class="map-msg" id="map-alert" role="alert" aria-live="polite" hidden></p>
+    <p class="map-hint" id="past-note" hidden></p>
+    <p class="map-msg map-msg-error" id="layer-note" role="status" aria-live="polite" hidden></p>
+    <p class="map-hint" id="map-empty" hidden>ยังไม่มีเคสที่ปักหมุดในช่วงนี้</p>
+    <p class="map-hint" id="map-count" hidden></p>
+    <noscript><p class="map-msg">ต้องเปิด JavaScript เพื่อใช้แผนที่</p></noscript>
+  </div>
+</section>
+<script type="application/json" id="map-data">{{ map_data | tojson }}</script>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='leaflet/leaflet.js') }}"></script>
+<script src="{{ url_for('static', filename='map.js') }}"></script>
+{% endblock %}

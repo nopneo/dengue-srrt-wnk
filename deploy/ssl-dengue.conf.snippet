@@ -1,0 +1,23 @@
+# บล็อกสำหรับ /etc/httpd/conf.d/ssl.conf (vhost 443) — เปิด https://wnkhos.go.th/dengue/
+#
+# ตำแหน่ง: ต้องแทรก "ก่อน" บรรทัด catch-all   ProxyPass / http://127.0.0.1:3000/
+#   (ถ้าอยู่หลัง catch-all ลิงก์ /dengue/ จะไปตกที่เว็บหลักของ รพ.)
+#
+# ขั้นตอนบังคับทุกครั้งที่แก้ ssl.conf (เว็บหลัก รพ. อยู่ vhost เดียวกัน พังพร้อมกันได้):
+#   1) cp -p /etc/httpd/conf.d/ssl.conf /etc/httpd/conf.d/ssl.conf.bak.$(date +%Y%m%d%H%M%S)
+#   2) แก้ไฟล์ แทรกบล็อกด้านล่างก่อน catch-all
+#   3-4) httpd -t && systemctl reload httpd   (ต้องขึ้น Syntax OK จึง reload — ไม่ผ่านให้คืนไฟล์จาก backup ทันทีแล้ว httpd -t ซ้ำ)
+#   5) setsebool -P httpd_can_network_connect 1   (ถ้ายังไม่เคยตั้ง)
+#
+# หมายเหตุ: Apache เติม X-Forwarded-For ต่อท้ายให้เองเมื่อใช้ ProxyPass แอปใช้รายการท้ายสุดนี้ตัดสินว่า
+# คำขอมาจาก LAN หรือไม่ ผู้ใช้สาธารณะผ่าน Cloudflare จึงเปิด /dengue/check ไม่ได้ (ได้ 403 โดยตั้งใจ)
+# พอร์ต 6800 ต้องปิดจากอินเทอร์เน็ตที่ firewall/NAT (ผู้ที่ต่อ :6800 ตรงปลอม X-Forwarded-For ได้)
+# — ห้ามเปิด RemoteIPHeader / mod_remoteip ให้ vhost นี้โดยไม่ตรวจผลกับหน้า /check ก่อน
+
+ProxyPass /dengue/ http://127.0.0.1:6800/
+ProxyPassReverse /dengue/ http://127.0.0.1:6800/
+<Location /dengue/>
+    RequestHeader set X-Forwarded-Prefix "/dengue"
+    RequestHeader set X-Forwarded-Proto "https"
+</Location>
+RedirectMatch ^/dengue$ /dengue/

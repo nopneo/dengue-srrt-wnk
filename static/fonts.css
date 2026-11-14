@@ -1,0 +1,17 @@
+/* ฝังฟอนต์ไว้ในแอป — ใช้ได้ใน intranet ไม่ต้องพึ่ง Google Fonts */
+@font-face { font-family: 'Sarabun'; font-weight: 400; font-display: swap;
+  src: url('fonts/Sarabun-Regular.ttf') format('truetype'); }
+@font-face { font-family: 'Sarabun'; font-weight: 500; font-display: swap;
+  src: url('fonts/Sarabun-Medium.ttf') format('truetype'); }
+@font-face { font-family: 'Sarabun'; font-weight: 600; font-display: swap;
+  src: url('fonts/Sarabun-SemiBold.ttf') format('truetype'); }
+@font-face { font-family: 'Sarabun'; font-weight: 700; font-display: swap;
+  src: url('fonts/Sarabun-Bold.ttf') format('truetype'); }
+@font-face { font-family: 'Kanit'; font-weight: 400; font-display: swap;
+  src: url('fonts/Kanit-Regular.ttf') format('truetype'); }
+@font-face { font-family: 'Kanit'; font-weight: 500; font-display: swap;
+  src: url('fonts/Kanit-Medium.ttf') format('truetype'); }
+@font-face { font-family: 'Kanit'; font-weight: 600; font-display: swap;
+  src: url('fonts/Kanit-SemiBold.ttf') format('truetype'); }
+@font-face { font-family: 'Kanit'; font-weight: 700; font-display: swap;
+  src: url('fonts/Kanit-Bold.ttf') format('truetype'); }

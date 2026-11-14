@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+.env
+data/
+*.db
+.superpowers/
+
+# คลิปแนะนำ (ไฟล์เสียง/วิดีโอใหญ่)
+video/

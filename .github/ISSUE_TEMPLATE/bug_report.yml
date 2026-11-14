@@ -1,0 +1,85 @@
+name: แจ้งปัญหา
+description: หน้าจอทำงานผิด แจ้งเตือนไม่ออก ตัวเลขผิด หรือติดตั้งไม่ได้ (หลังรัน setup_check.py แล้ว)
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **ก่อนแจ้ง** — รัน `python setup_check.py` (ดู INSTALL.md ข้อ 0) แล้วแก้ข้อ ✘ ก่อน
+        ปัญหาติดตั้งส่วนใหญ่มาจากสภาพแวดล้อมของเครื่อง (เวอร์ชัน Python, firewall, สิทธิ์ฐานข้อมูล, เขตเวลา)
+        ตัวเลขหรือพื้นที่ดูผิด → เปิดหน้า `/check` (Data Audit) จากเครือข่ายภายในดูก่อน
+        (รหัสโรค อำเภอ และพิกัดหมู่บ้านใน HOSxP ของแต่ละ รพ. ไม่เหมือนกัน)
+
+        ⚠ **ห้ามแนบข้อมูลผู้ป่วย** (ชื่อ HN เบอร์โทร ที่อยู่ เลขบัตร) หรือรหัสผ่าน / กุญแจ MOPH / ค่าใน `.env` /
+        ไฟล์ `data/settings.json` (และ `.prev`) — ไฟล์เหล่านี้เก็บรหัสผ่านและกุญแจเป็นข้อความธรรมดา —
+        ปิดบังในภาพหน้าจอและ log ก่อนแนบ
+  - type: dropdown
+    id: kind
+    attributes:
+      label: ประเภทปัญหา
+      options:
+        - ติดตั้ง / เปิดแอปไม่ได้
+        - ไม่มีแจ้งเตือนเข้า LINE / แจ้งซ้ำ / แจ้งผิดเคส
+        - หน้าจอทำงานผิด (รายการเคส แผนที่ ปักหมุด)
+        - ตัวเลข / พื้นที่ "ในเขต" / พิกัดหมู่บ้านไม่ตรงความจริง
+        - อื่น ๆ
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: เวอร์ชัน
+      description: ดูหัวข้อบนสุดของ CHANGELOG.md หรือ `git describe` เช่น 1.0.0
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: ติดตั้งแบบไหน
+      options:
+        - Linux (systemd / gunicorn)
+        - Windows
+        - อื่น ๆ
+    validations:
+      required: true
+  - type: textarea
+    id: setup_check
+    attributes:
+      label: ผลของ setup_check.py
+      description: คัดลอกผลทั้งหมดมาวาง (ผลนี้ไม่มีข้อมูลผู้ป่วย รหัสผ่าน หรือกุญแจ)
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: ขั้นตอนที่ทำให้เกิดปัญหา
+      description: "ทำอะไร ที่หน้าไหน (ถ้าเป็นแจ้งเตือน LINE ให้เล่าตั้งแต่ตอนวินิจฉัยใน HOSxP) ตั้ง env ค่าไหนไว้บ้าง (ไม่ต้องใส่ค่าลับ)"
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: ควรเป็นอย่างไร
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: เกิดอะไรขึ้นจริง
+      description: ตัวเลขผิด → บล็อกไหน ตัวเลขเท่าไร รายงานเดิมได้เท่าไร
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: ข้อความ error / log (ถ้ามี)
+      description: Linux `journalctl -u wnk-dengue -n 50` และผลของ `/healthz` (ไม่ต้องใส่ข้อมูลผู้ป่วย)
+      render: text
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: ยืนยัน
+      options:
+        - label: ข้อความนี้ไม่มีข้อมูลผู้ป่วย (ชื่อ HN เบอร์โทร ที่อยู่) หรือรหัสผ่าน / กุญแจ และไม่ได้แนบไฟล์ settings.json หรือ .env ในสิ่งที่แนบมา
+          required: true

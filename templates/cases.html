@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block content %}
+{% include "_alert_bars.html" %}
+<section class="kpis" aria-label="สรุปตัวเลข">
+  <div class="kpi g-blue"><div class="kpi-label">เคสที่ใช้งานอยู่</div><div class="kpi-num" data-testid="kpi-active">{{ kpis.active }}</div></div>
+  <div class="kpi g-orange"><div class="kpi-label">รอปักหมุด</div><div class="kpi-num" data-testid="kpi-pending">{{ kpis.pending }}</div></div>
+  <div class="kpi g-green"><div class="kpi-label">ยืนยันหมุดแล้ว</div><div class="kpi-num" data-testid="kpi-confirmed">{{ kpis.confirmed }}</div></div>
+  <div class="kpi g-red"><div class="kpi-label">นอกเขต</div><div class="kpi-num" data-testid="kpi-out">{{ kpis.out }}</div></div>
+</section>
+
+{% for g in groups %}
+<div class="same-village-bar" role="status">
+  หมู่บ้านเดียวกัน {{ g.count }} ราย (ยังไม่ปักหมุดครบ) · {{ g.area }}
+</div>
+{% endfor %}
+
+<section class="panel">
+  <div class="panel-head">รายการเคส</div>
+  <div class="filters" aria-label="ตัวกรอง">
+    <div class="fgroup"><span class="flabel">ตั้งแต่</span>
+      {% for n, iso in presets %}
+      <a class="fpill {{ 'on' if iso == since_iso }}" href="{{ url_for('index', since=iso, status=f.status, area=f.area, d=disease_param) }}">{{ n }} วัน</a>
+      {% endfor %}
+      {% if custom_since %}<a class="fpill on" href="{{ url_for('index', since=custom_since, status=f.status, area=f.area, d=disease_param) }}">{{ f.since | thai_date }}</a>{% endif %}
+    </div>
+    <div class="fgroup"><span class="flabel">สถานะ</span>
+      {% for key, label in (('active','ใช้งานอยู่'),('cancelled','ยกเลิกแล้ว'),('all','ทั้งหมด')) %}
+      <a class="fpill {{ 'on' if f.status == key }}" href="{{ url_for('index', since=since_iso, status=key, area=f.area, d=disease_param) }}">{{ label }}</a>
+      {% endfor %}
+    </div>
+    <div class="fgroup"><span class="flabel">พื้นที่</span>
+      {% for key, label in (('all','ทั้งหมด'),('in','ในเขต'),('out','นอกเขต')) %}
+      <a class="fpill {{ 'on' if f.area == key }}" href="{{ url_for('index', since=since_iso, status=f.status, area=key, d=disease_param) }}">{{ label }}</a>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table class="cases">
+      <thead>
+        <tr><th>วันที่/เวลา</th><th>รหัสโรค</th><th>OPD/IPD</th><th>อายุ/เพศ</th><th>พื้นที่</th><th>ป้ายหมุด</th><th>เขต</th><th><span class="sr-only">รายละเอียด</span></th></tr>
+      </thead>
+      <tbody>
+      {% for c in cases %}
+        <tr{% if c.status != 'active' %} class="row-cancelled"{% endif %}>
+          <td class="nowrap">{{ c.dx_at | thai_datetime }}</td>
+          <td class="nowrap">{{ c.icd10 | icd }}</td>
+          <td>{{ c.visit_type }}</td>
+          <td class="nowrap">{{ (c.age_years ~ ' ปี') if c.age_years is not none else '-' }} / {{ c.sex | sex }}</td>
+          <td class="nowrap">{{ c.village_code | area }}</td>
+          <td>{% if c.status != 'active' %}<span class="pill pill-gray">ยกเลิก</span>{% else %}{% set p = c.pin_state | pin_pill %}<span class="pill {{ p.css }}">{{ p.label }}</span>{% endif %}</td>
+          <td>{% set a = c.in_area | area_pill %}<span class="pill {{ a.css }}">{{ a.label }}</span></td>
+          <td><a class="view" href="{{ url_for('case_detail', case_id=c.id) }}">ดู</a></td>
+        </tr>
+      {% else %}
+        <tr><td colspan="8" class="empty">ไม่พบเคสตามเงื่อนไขที่เลือก</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

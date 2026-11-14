@@ -1,0 +1,7 @@
+* text=auto eol=lf
+static/leaflet/** -text
+static/fonts/** binary
+*.png binary
+*.jpg binary
+*.ico binary
+*.ttf binary

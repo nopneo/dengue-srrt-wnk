@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="login-card">
+  <div class="login-head">
+    <h2>{{ app_name }}</h2>
+    <p>โรงพยาบาลวังน้ำเขียว · เข้าสู่ระบบเพื่อดูรายการเคส</p>
+  </div>
+  <form method="post" action="{{ url_for('login') }}" class="login-form">
+    {% if error %}<div class="form-error" role="alert">{{ error }}</div>{% endif %}
+    <input type="hidden" name="next" value="{{ next }}">
+    <label for="username">ชื่อผู้ใช้</label>
+    <input id="username" name="username" type="text" autocomplete="username" autocapitalize="none" required autofocus>
+    <label for="password">รหัสผ่าน</label>
+    <input id="password" name="password" type="password" autocomplete="current-password" required>
+    <button type="submit" class="btn-primary">เข้าสู่ระบบ</button>
+  </form>
+</section>
+{% endblock %}

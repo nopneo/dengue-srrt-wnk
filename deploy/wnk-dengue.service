@@ -1,0 +1,37 @@
+[Unit]
+Description=Dengue SRRT alert (Flask/Gunicorn) - Wang Nam Khiao Hospital
+After=network.target
+
+[Service]
+User=dengue
+Group=dengue
+WorkingDirectory=/opt/dengue_srrt
+# .env เป็น root:dengue 640 — systemd อ่านด้วยสิทธิ์ root ก่อนสลับเป็นผู้ใช้ dengue
+EnvironmentFile=/opt/dengue_srrt/.env
+Environment=PYTHONUNBUFFERED=1
+# กฎบังคับ: worker เดียวเท่านั้น และห้ามเพิ่มตัวเลือก preload —
+# ตัวตั้งเวลาตรวจจับเป็นเธรดในโปรเซสเว็บ ล็อกกันรันซ้ำและ CYCLE_STATE (สถานะใน /healthz) เป็นของแต่ละโปรเซส
+# --worker-class gthread --threads 4: ยังเป็นโปรเซสเดียว แต่รับคำขอเว็บพร้อมกันได้ 4 เธรด —
+# ตัวตั้งเวลา (ส่ง LINE/ถาม HOSxP ช้า) หรือหน้า /check ที่ใช้เวลานานจะไม่ทำให้ทั้งเว็บค้าง
+# --timeout 120 เพราะหน้า /check อาจใช้เวลาตรวจฐาน HOSxP นาน
+# --no-control-socket: gunicorn 26 พยายามสร้างซ็อกเก็ตควบคุมใน /var/lib/dengue ซึ่งเป็นพื้นที่อ่านอย่างเดียว (ProtectSystem=strict) — ไม่ใช้ จึงปิด
+# bind 0.0.0.0:6800 ให้เครื่องใน LAN เข้าได้ — พอร์ต 6800 ต้องปิดจากอินเทอร์เน็ตที่ firewall/NAT เสมอ
+# (แอปเชื่อ X-Forwarded-For ตัวท้ายสุด ผู้ที่ต่อตรงปลอมได้) ถ้าไม่ต้องการ /check จากเครื่องอื่นใน LAN ให้ใช้ --bind 127.0.0.1:6800
+ExecStart=/opt/dengue_srrt/.venv/bin/gunicorn --workers 1 --worker-class gthread --threads 4 --timeout 120 --no-control-socket --bind 0.0.0.0:6800 wsgi:app
+Restart=on-failure
+RestartSec=5
+# ไม่ใช้ root: โค้ดเป็นของ root อ่านได้อย่างเดียว เขียนได้เฉพาะโฟลเดอร์ data (SQLite + scheduler.lock)
+# สร้างโฟลเดอร์ data ก่อนเริ่ม service ไม่งั้นระบบสร้างพื้นที่ทำงานไม่ได้ (status=226/NAMESPACE)
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+ReadWritePaths=/opt/dengue_srrt/data
+
+[Install]
+WantedBy=multi-user.target
