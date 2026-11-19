@@ -43,3 +43,24 @@ def login_as():
             s["user"] = username
             s["role"] = role
     return _login_as
+
+
+@pytest.fixture(autouse=True)
+def auto_form_csrf(monkeypatch):
+    """เทสต์เดิมที่ POST /login, /logout ตรง ๆ: ใส่โทเคน CSRF ของฟอร์มให้อัตโนมัติ (เหมือนเบราว์เซอร์ที่เปิดหน้ามาก่อน)
+    — ส่ง no_csrf=True เพื่อทดสอบว่าคำขอที่ไม่มีโทเคนถูกปฏิเสธ (tests/test_form_csrf.py)."""
+    from flask.testing import FlaskClient
+    real_post = FlaskClient.post
+
+    def post(self, path, *args, no_csrf=False, **kw):
+        if not no_csrf and path.split("?")[0] in ("/login", "/logout"):
+            data = dict(kw.get("data") or {})
+            if "csrf" not in data:
+                env = {k: kw[k] for k in ("headers", "environ_base") if k in kw}
+                with self.session_transaction(**env) as s:
+                    token = s.setdefault("csrf", "test-form-csrf-token")
+                data["csrf"] = token
+                kw["data"] = data
+        return real_post(self, path, *args, **kw)
+
+    monkeypatch.setattr(FlaskClient, "post", post)

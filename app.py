@@ -19,7 +19,8 @@ from flask import Flask, jsonify, redirect, render_template, request, session, u
 
 import alerts
 from auth import (MAX_USERNAME_LEN, DengueSessionInterface, LoginThrottle, client_key,
-                  has_role, is_lan_client, login_required, safe_next)
+                  form_csrf_ok, form_csrf_token, has_role, is_lan_client, login_required,
+                  safe_next)
 from case_views import register_case_routes
 from facility_service import FacilityService
 from facility_views import register_facility_routes
@@ -224,6 +225,7 @@ def create_app(settings: Settings | None = None, store: Store | None = None,
             "audit_needed": not settings.data_audited,
             "today_long": thai_date_long(date.today()),
             "role_label": ROLE_LABELS.get(role, role or ""),
+            "form_csrf_token": form_csrf_token,
             # ลิงก์ /check โผล่เฉพาะไคลเอนต์ใน LAN (ผู้ใช้สาธารณะไม่เห็นว่ามีหน้านี้)
             "show_check_link": is_lan_client(request, settings.lan_prefixes),
             # ลิงก์ "ตั้งค่า": ผู้ดูแล (admin) ที่เปิดจาก LAN เท่านั้น (เงื่อนไข LAN เดียวกับลิงก์ /check)
@@ -266,6 +268,9 @@ def _register_auth(app: Flask) -> None:
                 return redirect(safe_next(request.args.get("next")) or url_for("index"))
             return render_login()
 
+        if not form_csrf_ok():
+            # หน้า login เก่า/คุกกี้หาย หรือฟอร์มจากเว็บอื่น — ไม่นับเป็นการเดารหัส
+            return render_login("หน้าเข้าสู่ระบบหมดอายุ กรุณาลองใหม่อีกครั้ง", 400)
         username = (request.form.get("username") or "").strip()
         password = request.form.get("password") or ""
         too_long = len(username) > MAX_USERNAME_LEN
@@ -289,6 +294,10 @@ def _register_auth(app: Flask) -> None:
 
     @app.post("/logout")
     def logout():
+        if session.get("user") and not form_csrf_ok():
+            # ฟอร์มจากเว็บอื่นสั่ง logout ไม่ได้ (ยังไม่ได้ login อยู่แล้ว = ไม่มีอะไรให้ป้องกัน)
+            return render_template("message.html", page_title="ออกจากระบบไม่สำเร็จ",
+                                   message="หน้านี้หมดอายุ กรุณากลับไปหน้าหลักแล้วกดออกจากระบบอีกครั้ง"), 400
         session.clear()
         return redirect(url_for("login"))
 

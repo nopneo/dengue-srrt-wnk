@@ -43,6 +43,7 @@
       <div class="uname">{{ session.get('user') }}</div>
       <span class="role-pill">{{ role_label }}</span>
       <form method="post" action="{{ url_for('logout') }}">
+        <input type="hidden" name="csrf" value="{{ form_csrf_token() }}">
         <button type="submit" class="logout">ออกจากระบบ</button>
       </form>
     </div>
