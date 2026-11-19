@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import ipaddress
+import secrets
 import threading
 import time
 from collections import defaultdict
@@ -152,6 +153,27 @@ def lan_only(view):
                 message="หน้านี้เปิดเฉพาะเครือข่ายภายในโรงพยาบาลเท่านั้น"), 403
         return view(*args, **kwargs)
     return wrapped
+
+
+FORM_CSRF_FIELD = "csrf"
+
+
+def form_csrf_token() -> str:
+    """โทเคน CSRF ของฟอร์ม HTML (login / logout) เก็บใน session — สร้างครั้งแรกที่เรียก.
+
+    ฟอร์มสองตัวนี้ส่งแบบ form post ธรรมดา (ไม่ผ่าน api_write_guard) จึงต้องมีโทเคนเอง:
+    กันเว็บอื่นพาเบราว์เซอร์มา login ด้วยบัญชีของผู้โจมตี (login CSRF) หรือสั่ง logout."""
+    token = session.get(FORM_CSRF_FIELD)
+    if not token:
+        token = session[FORM_CSRF_FIELD] = secrets.token_urlsafe(32)
+    return token
+
+
+def form_csrf_ok() -> bool:
+    """True เมื่อโทเคนในฟอร์มตรงกับใน session (session ใหม่ที่ไม่มีโทเคน = ไม่ผ่าน)."""
+    want = session.get(FORM_CSRF_FIELD) or ""
+    sent = request.form.get(FORM_CSRF_FIELD) or ""
+    return bool(want) and secrets.compare_digest(sent.encode(), want.encode())
 
 
 def safe_next(target: str | None) -> str | None:
