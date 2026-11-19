@@ -258,6 +258,47 @@ sudo setsebool -P httpd_can_network_connect 1    # 5) ครั้งแรก�
 เมื่อขึ้นระบบจริงแล้ว ตั้ง "ยืนยันตัวเลขแล้ว" (`DENGUE_DATA_AUDITED`) เป็น 1 และเปลี่ยนกุญแจ MOPH เป็นของกลุ่ม SRRT จริงจากหน้าเดียวกันนี้ (แถบเตือน "ตัวเลขยังไม่ได้ตรวจ" จะหายทุกเครื่อง)
 ถ้ายังไม่ได้ตั้งฐานข้อมูล `/healthz` จะเป็น `ok:false` พร้อม `last_error` "ยังไม่ได้ตั้งค่า DB_HOST / DB_USER" — ปกติจนกว่าจะบันทึกค่า
 
+### 4.10 ทางเข้าภายใน รพ. (โดเมนย่อยที่ชี้ IP ภายใน — แนะนำสำหรับ `/check` และ `/settings`)
+
+ทางสาธารณะ (เช่น `https://<โดเมน รพ.>/dengue/` ผ่าน Cloudflare) ใช้งานได้ตามปกติหลัง login · แต่ `/check` และ `/settings` ตอบ 403 เพราะคำขอผ่าน Cloudflare ไม่ได้มาจาก IP ใน `DENGUE_LAN_PREFIXES` · ทางเข้าภายในเป็นโดเมนย่อยอีกชื่อที่ DNS ชี้ไป **IP ภายใน** ของเครื่องแอป
+เบราว์เซอร์ในโรงพยาบาลจึงต่อตรงถึงเครื่องแอป ไม่ผ่าน Cloudflare/อินเทอร์เน็ต — Apache ส่ง IP จริงของเครื่องเจ้าหน้าที่ (`192.168.x.x`) ต่อให้แอป
+แอปนับเป็นเครื่องใน รพ. เอง (`/check` และ `/settings` (สำหรับ admin) เปิดได้ โดยไม่ต้องเข้าทาง `http://<ที่อยู่เซิร์ฟเวอร์>:6800` แบบไม่เข้ารหัส) และจากอินเทอร์เน็ตเปิดไม่ได้เพราะ IP ภายในใช้จากข้างนอกไม่ได้ — ใช้จากนอก รพ. ให้ต่อ VPN ของ รพ. (ห้ามเพิ่ม IP บ้าน)
+
+**ตัวอย่าง รพ.วังน้ำเขียว:** `https://lan.wnkhos.go.th/dengue/` (DNS → `192.168.11.40`) · หน้าแรก `https://lan.wnkhos.go.th/` มีลิงก์ระบบภายในทุกตัว
+
+1. **DNS:** เพิ่ม A record เช่น `lan` → IP ภายในของเครื่องแอป · ใน Cloudflare ต้องเป็น **DNS only (เมฆสีเทา)** — เปิด proxy (เมฆสีส้ม) แล้วใช้ไม่ได้
+   (resolver/เราเตอร์บางรุ่นมี DNS rebinding protection ที่ไม่ตอบ IP ภายใน — ทดสอบจากเครื่องใน รพ. ทั้ง DNS ของ ISP และ 8.8.8.8)
+2. **ใบรับรอง:** Let's Encrypt แบบ HTTP-01 ออกให้ไม่ได้ (ข้างนอกเข้าถึง IP ภายในไม่ได้) — ใช้ DNS-01 ผ่าน Cloudflare (ฟรี ต่ออายุอัตโนมัติ):
+   ```bash
+   dnf install certbot python3-certbot-dns-cloudflare        # หรือ apt install python3-certbot-dns-cloudflare
+   # /root/.secrets/cloudflare.ini (chmod 600): dns_cloudflare_api_token = <token สิทธิ์ Zone:DNS:Edit เฉพาะโดเมนนี้>
+   certbot certonly --dns-cloudflare --dns-cloudflare-credentials /root/.secrets/cloudflare.ini -d lan.<โดเมน รพ.>
+   ```
+3. **Apache:** vhost แยก (เช่น `/etc/httpd/conf.d/zz-lan-443.conf`) จำกัดให้เฉพาะ IP ภายใน แล้วส่งต่อแบบเดียวกับทางสาธารณะ
+   (ใช้ vhost เดียวรวมทุกแอปภายในได้ — เพิ่ม `ProxyPass` ของแต่ละแอปต่อกัน):
+   ```apache
+   <VirtualHost *:443>
+       ServerName lan.<โดเมน รพ.>
+       SSLEngine on
+       SSLCertificateFile    /etc/letsencrypt/live/lan.<โดเมน รพ.>/fullchain.pem
+       SSLCertificateKeyFile /etc/letsencrypt/live/lan.<โดเมน รพ.>/privkey.pem
+       <Location />
+           Require ip 192.168.0.0/16 10.0.0.0/8 172.16.0.0/12 127.0.0.1
+       </Location>
+       ProxyPreserveHost On
+       RequestHeader set X-Forwarded-Proto "https"
+       ProxyPass        /dengue/ http://127.0.0.1:6800/
+       ProxyPassReverse /dengue/ http://127.0.0.1:6800/
+       <Location /dengue/>
+           RequestHeader set X-Forwarded-Prefix "/dengue"
+       </Location>
+       RedirectMatch ^/dengue$ /dengue/
+   </VirtualHost>
+   ```
+   `httpd -t` ผ่านแล้วค่อย `systemctl reload httpd`
+4. **`.env`:** ไม่ต้องตั้งอะไรเพิ่มถ้า IP ของเครื่องใน รพ. อยู่ในค่าเริ่มต้นของ `DENGUE_LAN_PREFIXES` (มี `192.168.`, `10.`, `172.16.`–`172.31.` อยู่แล้ว) · อย่าใส่ IP บ้าน/มือถือใน `DENGUE_LAN_PREFIXES`
+5. **ทดสอบ:** จากเครื่องใน รพ. ที่ login ด้วยบัญชี admin เปิด `https://lan.<โดเมน รพ.>/dengue/check` และ `/dengue/settings` ได้ · จากมือถือที่ใช้เน็ตมือถือ (ปิด Wi-Fi/VPN) ต้องเปิดไม่ได้
+
 ## 5. ตั้งค่า (.env)
 
 ตัวอย่างครบทุกค่าอยู่ใน [`.env.example`](.env.example) (มีคำอธิบายบรรทัดต่อบรรทัด) — ตารางนี้สรุปค่าที่มีผลต่อการใช้งาน:
@@ -404,7 +445,7 @@ sudo journalctl -u wnk-dengue -f                      # ดูสด
 | มีวินิจฉัยแต่ไม่มีเคสเข้าเลย และ `/check` แสดง `DENGUE_START_FROM` เป็นวันในอนาคต | ใส่ปี พ.ศ. (เช่น `2569-11-15` เป็นอนาคตที่ถูกต้องตาม ISO จึงไม่แจ้งอะไร) — แก้เป็น ค.ศ. · ค่ารูปแบบผิดจะถูกแทนด้วยวันที่ปัจจุบันเงียบ ๆ (ข้อ 5) |
 | เคสไม่เข้าเลย | `DENGUE_ICDS` ไม่ตรงรหัสที่ HOSxP ของ รพ. ใช้ · `DENGUE_START_FROM` เป็นวันที่ในอนาคต · เป็น HN เดิมที่มาตามอาการภายใน `DENGUE_REALERT_DAYS` วัน (ไม่นับเป็นเคสใหม่) |
 | เคสถูกติดป้าย "นอกเขต" ทุกราย | `DENGUE_AREA_AMPHOE` ไม่ได้ตั้งและหาอำเภอจากตาราง `village` ไม่ได้ — ตั้งรหัสจังหวัด+อำเภอ 4 หลัก |
-| เข้า `/check` ได้ 403 | ไม่ได้เข้าจาก LAN หรือเข้าผ่านโดเมนสาธารณะ — ใช้ `http://<ที่อยู่เซิร์ฟเวอร์>:6800/check` · ถ้าเครือข่าย รพ. ไม่อยู่ในค่าเริ่มต้น ตั้ง `DENGUE_LAN_PREFIXES` |
+| เข้า `/check` ได้ 403 | ไม่ได้เข้าจาก LAN หรือเข้าผ่านโดเมนสาธารณะ — ใช้ทางเข้าภายใน (ข้อ 4.10 เช่น `https://lan.<โดเมน รพ.>/dengue/check`) หรือ `http://<ที่อยู่เซิร์ฟเวอร์>:6800/check` · ถ้าเครือข่าย รพ. ไม่อยู่ในค่าเริ่มต้น ตั้ง `DENGUE_LAN_PREFIXES` |
 | login ไม่ได้ ขึ้นให้ลองใหม่ในอีก N นาที | ถูกล็อกเพราะรหัสผิดหลายครั้ง รอครบเวลา หรือ restart service |
 | แผนที่เป็นพื้นเทา | เบราว์เซอร์ขอ tile ไม่ได้ (ไม่มีอินเทอร์เน็ต หรือ `DENGUE_TILE_URL` ผิด) |
 | ไม่เห็นเมนู "ตั้งค่า" / เปิด `/settings` ได้ 403 | บัญชีไม่ใช่ `admin` (ได้ 403) หรือไม่ได้เข้าจาก LAN ผ่านที่อยู่ตรง `http://<ที่อยู่เซิร์ฟเวอร์>:6800/settings` (ผ่านโดเมนสาธารณะได้ 403 โดยตั้งใจ) · ไม่มีบัญชี `admin` เลย → `run.py add-user <ชื่อผู้ใช้> admin` (ข้อ 4.6) |
